@@ -1,0 +1,110 @@
+(master*): /home/steven/tmp/virtual_microphone
+steven@kowari:$ ./virtual-mic.sh -n 4 -l wombat -l wombat2
+Creating 4 virtual audio pipeline pair(s)...
+No valid command specified.
+
+(master*): /home/steven/tmp/virtual_microphone
+steven@kowari:$   pactl list short sinks | rg 'virt_'
+  pactl list short sources | rg 'virt_'
+635	virt_wombat_input_sink	PipeWire	float32le 2ch 48000Hz	SUSPENDED
+635	virt_wombat_input_sink.monitor	PipeWire	float32le 2ch 48000Hz	SUSPENDED
+
+(master*): /home/steven/tmp/virtual_microphone
+steven@kowari:$ bash -x ./virtual-mic.sh -n 4 -l wombat -l wombat2
++ set -euo pipefail
++ main -n 4 -l wombat -l wombat2
++ require_cmd pactl
++ local cmd=pactl
++ command -v pactl
++ local count=
++ labels=()
++ local -a labels
++ getopts :n:l:h opt
++ case "${opt}" in
++ count=4
++ getopts :n:l:h opt
++ case "${opt}" in
++ labels+=("${OPTARG}")
++ getopts :n:l:h opt
++ case "${opt}" in
++ labels+=("${OPTARG}")
++ getopts :n:l:h opt
++ [[ -z 4 ]]
++ [[ 4 =~ ^[1-9][0-9]*$ ]]
++ final_labels=()
++ local -a final_labels
++ local i=0
++ local auto_idx=1
++ ((  i < count  ))
++ ((  i < 2  ))
++ final_labels+=("${labels[${i}]}")
++ (( i += 1 ))
++ ((  i < count  ))
++ ((  i < 2  ))
++ final_labels+=("${labels[${i}]}")
++ (( i += 1 ))
++ ((  i < count  ))
++ ((  i < 2  ))
++ final_labels+=("v${auto_idx}")
++ (( auto_idx += 1 ))
++ (( i += 1 ))
++ ((  i < count  ))
++ ((  i < 2  ))
++ final_labels+=("v${auto_idx}")
++ (( auto_idx += 1 ))
++ (( i += 1 ))
++ ((  i < count  ))
++ echo 'Creating 4 virtual audio pipeline pair(s)...'
+Creating 4 virtual audio pipeline pair(s)...
++ for label in "${final_labels[@]}"
++ local safe_label
+++ sanitize_id wombat
+++ local value=wombat
+++ value=wombat
+++ value=wombat
+++ value=wombat
+++ [[ -z wombat ]]
+++ printf '%s\n' wombat
++ safe_label=wombat
++ local sink_name=virt_wombat_input_sink
++ local source_name=virt_wombat_output
++ local 'sink_desc=wombat input sink'
++ local 'source_desc=wombat virtual audio output'
++ sink_exists virt_wombat_input_sink
++ local sink_name=virt_wombat_input_sink
++ pactl list short sinks
++ awk '{print $2}'
++ grep -Fxq virt_wombat_input_sink
++ echo 'Skipping '\''wombat'\'': sink/source already exists (virt_wombat_input_sink, virt_wombat_output).'
+Skipping 'wombat': sink/source already exists (virt_wombat_input_sink, virt_wombat_output).
++ continue
++ for label in "${final_labels[@]}"
++ local safe_label
+++ sanitize_id wombat2
+++ local value=wombat2
+++ value=wombat2
+++ value=wombat2
+++ value=wombat2
+++ [[ -z wombat2 ]]
+++ printf '%s\n' wombat2
++ safe_label=wombat2
++ local sink_name=virt_wombat2_input_sink
++ local source_name=virt_wombat2_output
++ local 'sink_desc=wombat2 input sink'
++ local 'source_desc=wombat2 virtual audio output'
++ sink_exists virt_wombat2_input_sink
++ local sink_name=virt_wombat2_input_sink
++ pactl list short sinks
++ awk '{print $2}'
++ grep -Fxq virt_wombat2_input_sink
++ source_exists virt_wombat2_output
++ local source_name=virt_wombat2_output
++ pactl list short sources
++ awk '{print $2}'
++ grep -Fxq virt_wombat2_output
++ pactl load-module module-null-sink sink_name=virt_wombat2_input_sink
++ pactl update-sink-proplist virt_wombat2_input_sink 'device.description=wombat2 input sink'
+No valid command specified.
+
+(master*): /home/steven/tmp/virtual_microphone
+steven@kowari:$ 
