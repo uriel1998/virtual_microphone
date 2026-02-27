@@ -3,10 +3,11 @@
 Scripts to create and manage virtual audio paths using `pactl`.
 
 Each pipeline consists of:
-- A virtual input sink: `<label> input sink`
-- A virtual output source: `<label> virtual audio output`
+- A virtual playback sink: `<label> playback sink`
+- A virtual recording source: `<label> recording source` (from that sink's monitor)
 
 The script creates device names with the `virt_` prefix.
+Each pair is isolated from physical speakers/microphones because audio stays in a null sink + monitor source path.
 
 ## Requirements
 

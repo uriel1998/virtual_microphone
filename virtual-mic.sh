@@ -12,8 +12,8 @@ Usage:
 Description:
     Creates virtual audio pipeline pairs.
     For each label, the script creates:
-    - "<label> input sink" (null sink)
-    - "<label> virtual audio output" (remap source from the sink monitor)
+    - "<label> playback sink" (null sink)
+    - "<label> recording source" (remap source from the sink monitor)
 
 Label selection:
     - Uses provided -l labels first, in order.
@@ -31,6 +31,17 @@ require_cmd() {
         echo "ERROR: missing command: ${cmd}" >&2
         exit 1
     }
+}
+
+ensure_pulse_server() {
+    # pactl talks to a PulseAudio-compatible server (PulseAudio or pipewire-pulse).
+    local server_name
+    server_name="$(pactl info 2>/dev/null | awk -F': ' '/^Server Name:/ {print $2}')"
+    if [[ -z "${server_name}" ]]; then
+        echo "ERROR: Unable to query PulseAudio/PipeWire server via pactl." >&2
+        echo "Ensure pipewire-pulse (or PulseAudio) is running for this user session." >&2
+        exit 1
+    fi
 }
 
 sanitize_id() {
@@ -165,6 +176,7 @@ main() {
     fi
 
     require_cmd "pactl"
+    ensure_pulse_server
 
     local count=""
     local -a labels=()
@@ -224,16 +236,18 @@ main() {
         local safe_label
         safe_label="$(sanitize_id "${label}")"
 
-        local sink_name="virt_${safe_label}_input_sink"
-        local source_name="virt_${safe_label}_output"
-        local sink_desc="${label} input sink"
-        local source_desc="${label} virtual audio output"
+        local endpoint_base="virt_${safe_label}"
+        local sink_name="${endpoint_base}_playback_sink"
+        local source_name="${endpoint_base}_record_source"
+        local sink_desc="${label} playback sink"
+        local source_desc="${label} recording source"
 
         if sink_exists "${sink_name}"; then
             echo "Sink already exists for '${label}': ${sink_name}"
         else
             pactl load-module module-null-sink \
-                sink_name="${sink_name}" >/dev/null
+                sink_name="${sink_name}" \
+                sink_properties="device.description=${sink_desc}" >/dev/null
             echo "Created sink for '${label}': ${sink_desc} (${sink_name})"
         fi
 
@@ -242,8 +256,9 @@ main() {
         else
             pactl load-module module-remap-source \
                 master="${sink_name}.monitor" \
-                source_name="${source_name}" >/dev/null
-            echo "Created output for '${label}': ${source_desc} (${source_name})"
+                source_name="${source_name}" \
+                source_properties="device.description=${source_desc}" >/dev/null
+            echo "Created source for '${label}': ${source_desc} (${source_name})"
         fi
     done
 }
