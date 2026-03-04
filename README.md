@@ -1,6 +1,8 @@
 # virtual-mic
 
-Scripts to create and manage virtual audio paths using `pactl`.
+Scripts to create and manage virtual audio paths using `pactl` on Linux.
+
+Software with similar functionality exists for <a href="https://github.com/VirtualDrivers/Virtual-Audio-Driver">Windows</a> and <a href="https://apps.apple.com/us/app/dipper-audio-capture/id6450242673?mt=12">macOS</a>.
 
 Each pipeline consists of:
 - A virtual playback sink: `<label> playback sink`
