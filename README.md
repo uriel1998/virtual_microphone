@@ -1,6 +1,6 @@
 # virtual-mic
 
-Scripts to create and manage virtual audio paths using `pactl` on Linux.
+Scripts to create and manage virtual audio paths using `pactl` on Linux. 
 
 Software with similar functionality exists for <a href="https://github.com/VirtualDrivers/Virtual-Audio-Driver">Windows</a> and <a href="https://apps.apple.com/us/app/dipper-audio-capture/id6450242673?mt=12">macOS</a>.
 
@@ -10,6 +10,8 @@ Each pipeline consists of:
 
 The script creates device names with the `virt_` prefix.
 Each pair is isolated from physical speakers/microphones because audio stays in a null sink + monitor source path.
+
+![isolated_streams](https://github.com/uriel1998/virtual_microphone/blob/master/2026-03-12_11.54.36.png?raw=true)
 
 ## Requirements
 
@@ -79,6 +81,8 @@ Remove all created virtual devices:
 ## virtual-mic-mux.sh
 
 `virtual-mic-mux.sh` combines audio streams (for example, mic + app audio) into a single virtual mic path.
+
+![combined_streams](https://raw.githubusercontent.com/uriel1998/virtual_microphone/refs/heads/master/2026-03-12_11.54.56.png)
 
 Show its built-in help:
 
