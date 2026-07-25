@@ -93,12 +93,13 @@ Show its built-in help:
 Current usage from the script:
 
 ```bash
-./virtual-mic-mux.sh on
+./virtual-mic-mux.sh on [--monitor-local]
 ./virtual-mic-mux.sh off
 ./virtual-mic-mux.sh status
 ```
 
 Command summary:
 - `on`: Create and enable the muxed virtual mic path.
+  Add `--monitor-local` to also hear app/music audio through your current default output device, while keeping the mic mux-only.
 - `off`: Tear it down and restore previous defaults.
 - `status`: Show current mux status.

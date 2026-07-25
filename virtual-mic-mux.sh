@@ -4,8 +4,11 @@ set -euo pipefail
 STATE_DIR="${XDG_STATE_HOME:-${HOME}/.local/state}/virtual-mic"
 STATE_FILE="${STATE_DIR}/state.env"
 
-SINK_NAME="virtual_mic_sink"
-SINK_DESC="VirtualMic Sink"
+APP_SINK_NAME="virtual_mic_sink"
+APP_SINK_DESC="VirtualMic Sink"
+
+MIX_SINK_NAME="virtual_mic_mix_sink"
+MIX_SINK_DESC="VirtualMic Mix Sink"
 
 SRC_NAME="virtual_mic_source"
 SRC_DESC="VirtualMic Source"
@@ -35,7 +38,8 @@ module_loaded() {
 }
 
 sink_exists() {
-    pactl list short sinks | awk '{print $2}' | grep -Fxq "${SINK_NAME}"
+    local sink_name="${1}"
+    pactl list short sinks | awk '{print $2}' | grep -Fxq "${sink_name}"
 }
 
 source_exists() {
@@ -45,18 +49,26 @@ source_exists() {
 save_state() {
     local prior_sink="${1}"
     local prior_source="${2}"
-    local mod_null_sink="${3}"
-    local mod_remap_source="${4}"
-    local mod_loopback_mic="${5}"
+    local mod_app_null_sink="${3}"
+    local mod_mix_null_sink="${4}"
+    local mod_remap_source="${5}"
+    local mod_loopback_mic="${6}"
+    local mod_loopback_app_to_mix="${7}"
+    local mod_loopback_app_to_output="${8}"
+    local monitor_local="${9}"
 
     mkdir -p "${STATE_DIR}"
 
     cat > "${STATE_FILE}" <<EOF
 PRIOR_DEFAULT_SINK="${prior_sink}"
 PRIOR_DEFAULT_SOURCE="${prior_source}"
-MOD_NULL_SINK="${mod_null_sink}"
+MOD_APP_NULL_SINK="${mod_app_null_sink}"
+MOD_MIX_NULL_SINK="${mod_mix_null_sink}"
 MOD_REMAP_SOURCE="${mod_remap_source}"
 MOD_LOOPBACK_MIC="${mod_loopback_mic}"
+MOD_LOOPBACK_APP_TO_MIX="${mod_loopback_app_to_mix}"
+MOD_LOOPBACK_APP_TO_OUTPUT="${mod_loopback_app_to_output}"
+MONITOR_LOCAL="${monitor_local}"
 EOF
 }
 
@@ -70,6 +82,7 @@ load_state() {
 }
 
 enable_virtual_mic() {
+    local monitor_local="${1:-0}"
     require_cmd "pactl"
 
     if [[ -f "${STATE_FILE}" ]]; then
@@ -89,37 +102,63 @@ enable_virtual_mic() {
         exit 1
     fi
 
-    # 1) Create a null sink that apps can output to
-    local mod_null_sink=""
-    mod_null_sink="$(pactl load-module module-null-sink \
-        sink_name="${SINK_NAME}" \
-        sink_properties="device.description=${SINK_DESC}")"
+    # 1) Create a null sink that apps/music can output to.
+    local mod_app_null_sink=""
+    mod_app_null_sink="$(pactl load-module module-null-sink \
+        sink_name="${APP_SINK_NAME}" \
+        sink_properties="device.description=${APP_SINK_DESC}")"
 
-    # 2) Create a virtual source from the null sink's monitor
+    # 2) Create a separate mix sink that combines app audio and mic audio.
+    local mod_mix_null_sink=""
+    mod_mix_null_sink="$(pactl load-module module-null-sink \
+        sink_name="${MIX_SINK_NAME}" \
+        sink_properties="device.description=${MIX_SINK_DESC}")"
+
+    # 3) Create a virtual source from the mix sink's monitor.
     #    This becomes the "virtual mic" that conferencing apps should use
     local mod_remap_source=""
     mod_remap_source="$(pactl load-module module-remap-source \
-        master="${SINK_NAME}.monitor" \
+        master="${MIX_SINK_NAME}.monitor" \
         source_name="${SRC_NAME}" \
         source_properties="device.description=${SRC_DESC}")"
 
-    # 3) Loop your *current default mic* into the virtual sink so mic + app audio are mixed
+    # 4) Feed app/music audio into the mix sink.
+    local mod_loopback_app_to_mix=""
+    mod_loopback_app_to_mix="$(pactl load-module module-loopback \
+        source="${APP_SINK_NAME}.monitor" \
+        sink="${MIX_SINK_NAME}" \
+        latency_msec=10)"
+
+    # 5) Loop your *current default mic* into the mix sink so mic + app audio are mixed.
     #    (If you want a specific mic instead of the default, edit "source=" below.)
     local mod_loopback_mic=""
     mod_loopback_mic="$(pactl load-module module-loopback \
         source="${prior_source}" \
-        sink="${SINK_NAME}" \
+        sink="${MIX_SINK_NAME}" \
         latency_msec=10)"
+
+    local mod_loopback_app_to_output=""
+    if [[ "${monitor_local}" == "1" ]]; then
+        mod_loopback_app_to_output="$(pactl load-module module-loopback \
+            source="${APP_SINK_NAME}.monitor" \
+            sink="${prior_sink}" \
+            latency_msec=10)"
+    fi
 
     # Set defaults so apps that just use defaults can “see” the virtual mic immediately.
     # We do NOT force the default sink to the virtual sink; you can route specific apps to it.
     pactl set-default-source "${SRC_NAME}"
 
-    save_state "${prior_sink}" "${prior_source}" "${mod_null_sink}" "${mod_remap_source}" "${mod_loopback_mic}"
+    save_state "${prior_sink}" "${prior_source}" "${mod_app_null_sink}" "${mod_mix_null_sink}" "${mod_remap_source}" "${mod_loopback_mic}" "${mod_loopback_app_to_mix}" "${mod_loopback_app_to_output}" "${monitor_local}"
 
     echo "Enabled."
-    echo "Playback sink (route apps to this):   ${SINK_DESC}  (${SINK_NAME})"
+    echo "Playback sink (route apps to this):   ${APP_SINK_DESC}  (${APP_SINK_NAME})"
     echo "Recording source (select as mic):     ${SRC_DESC}   (${SRC_NAME})"
+    if [[ "${monitor_local}" == "1" ]]; then
+        echo "Local monitor:                        app/music only -> ${prior_sink}"
+    else
+        echo "Local monitor:                        disabled"
+    fi
     echo
     echo "To revert:"
     echo "    ${0} off"
@@ -142,7 +181,7 @@ disable_virtual_mic() {
     fi
 
     # Unload modules (best-effort, tolerate partial teardown)
-    for mid in "${MOD_LOOPBACK_MIC:-}" "${MOD_REMAP_SOURCE:-}" "${MOD_NULL_SINK:-}"; do
+    for mid in "${MOD_LOOPBACK_APP_TO_OUTPUT:-}" "${MOD_LOOPBACK_MIC:-}" "${MOD_LOOPBACK_APP_TO_MIX:-}" "${MOD_REMAP_SOURCE:-}" "${MOD_MIX_NULL_SINK:-}" "${MOD_APP_NULL_SINK:-}"; do
         if [[ -n "${mid}" ]]; then
             if pactl list short modules | awk '{print $1}' | grep -Fxq "${mid}"; then
                 pactl unload-module "${mid}" || true
@@ -163,19 +202,29 @@ status_virtual_mic() {
         load_state || true
         echo "    PRIOR_DEFAULT_SINK=${PRIOR_DEFAULT_SINK:-}"
         echo "    PRIOR_DEFAULT_SOURCE=${PRIOR_DEFAULT_SOURCE:-}"
-        echo "    MOD_NULL_SINK=${MOD_NULL_SINK:-}"
+        echo "    MOD_APP_NULL_SINK=${MOD_APP_NULL_SINK:-}"
+        echo "    MOD_MIX_NULL_SINK=${MOD_MIX_NULL_SINK:-}"
         echo "    MOD_REMAP_SOURCE=${MOD_REMAP_SOURCE:-}"
         echo "    MOD_LOOPBACK_MIC=${MOD_LOOPBACK_MIC:-}"
+        echo "    MOD_LOOPBACK_APP_TO_MIX=${MOD_LOOPBACK_APP_TO_MIX:-}"
+        echo "    MOD_LOOPBACK_APP_TO_OUTPUT=${MOD_LOOPBACK_APP_TO_OUTPUT:-}"
+        echo "    MONITOR_LOCAL=${MONITOR_LOCAL:-0}"
     else
         echo "State: disabled (no state file)"
     fi
 
     echo
     echo "Current objects:"
-    if sink_exists; then
-        echo "    Sink exists: ${SINK_NAME}"
+    if sink_exists "${APP_SINK_NAME}"; then
+        echo "    App sink exists: ${APP_SINK_NAME}"
     else
-        echo "    Sink missing: ${SINK_NAME}"
+        echo "    App sink missing: ${APP_SINK_NAME}"
+    fi
+
+    if sink_exists "${MIX_SINK_NAME}"; then
+        echo "    Mix sink exists: ${MIX_SINK_NAME}"
+    else
+        echo "    Mix sink missing: ${MIX_SINK_NAME}"
     fi
 
     if source_exists; then
@@ -188,14 +237,17 @@ status_virtual_mic() {
 usage() {
     cat <<EOF
 Usage:
-    ${0} on
+    ${0} on [--monitor-local]
     ${0} off
     ${0} status
 
 What it does:
-    - Creates a virtual sink:   "${SINK_DESC}"
-    - Creates a virtual source: "${SRC_DESC}" (from sink monitor)
-    - Loops your prior default mic into the virtual sink (mixing mic + app audio)
+    - Creates an app playback sink: "${APP_SINK_DESC}"
+    - Creates a separate mix sink used only internally
+    - Creates a virtual source: "${SRC_DESC}" (from the mix sink monitor)
+    - Loops app/music audio from the app sink into the mix sink
+    - Loops your prior default mic into the mix sink
+    - Optionally loops only app/music audio back to your prior default output
     - Sets default source to the virtual source
     - Stores prior defaults + module IDs so "off" restores cleanly
 EOF
@@ -205,7 +257,23 @@ main() {
     local action="${1:-}"
     case "${action}" in
         on)
-            enable_virtual_mic
+            shift || true
+            case "${1:-}" in
+                "" )
+                    enable_virtual_mic 0
+                    ;;
+                --monitor-local)
+                    enable_virtual_mic 1
+                    ;;
+                -h|--help)
+                    usage
+                    ;;
+                *)
+                    echo "ERROR: Unknown option for 'on': ${1}" >&2
+                    usage
+                    exit 1
+                    ;;
+            esac
             ;;
         off)
             disable_virtual_mic
